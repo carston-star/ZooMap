@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<! Fix broken issues>
+    <! code is not finding actual activities (just non-relative POIs)>
+    <! when a new search is completed, old search results are not removed - need to 'refresh' view>
+<! Development tracking list>
+    <! add smart seach to search by city name instead of zip code? i noticed that users can enter city names and it works>
+    <! add custom icons, such as a Zoo image for zoos, etc. to differentiate the different activities>
+<html>
+<head>
+    <title>Animal Attractions Finder</title>
+    <style>
+        #map {
+            height: 500px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Find Animal Attractions</h1>
+    <form id="searchForm">
+<!-- zip codee field allows city, state entries. Figure out what entry to use and use correct coding -->
+<!-- rename text box accordingly and add text field data -->
+        <label for="zipCode">Zip Code:</label>
+        <input type="text" id="zipCode" name="zipCode" required>
+<!-- do not allow negative distances -->
+<!-- add text field data -->
+        <label for="distance">Distance (miles):</label>
+        <input type="number" id="distance" name="distance" required>
+        <button type="submit">Search</button>
+    </form>
+    <div id="map"></div>
+
+<!-- watched videos and searched web on how to create Google API -->
+<!-- https://developers.google.com/maps/documentation/places/web-service/place-types#table-a -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCJiFNjvV4IfLTf9DkVFYNZ8IQJYgrxEdE&libraries=places"></script>
+    <script>
+        let map;
+
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 28.890661, lng: -97.911530 }, // Center over San Marcos, TX
+                zoom: 4
+            });
+        }
+
+        function geocodeZipCode(zipCode) {
+            const geocoder = new google.maps.Geocoder();
+            return new Promise((resolve, reject) => {
+                geocoder.geocode({ 'address': zipCode }, (results, status) => {
+                    if (status === 'OK') {
+                        resolve(results[0].geometry.location);
+                    } else {
+                        reject('Geocode was not successful for the following reason: ' + status);
+                    }
+                });
+            });
+        }
+ // need to fix
+    // Type tags are pulled from Google Maps Place Types(NEW) Table A
+    // https://developers.google.com/maps/documentation/places/web-service/place-types#entertainment-and-recreation
+        function searchNearby(location, radius) {
+            const service = new google.maps.places.PlacesService(map);
+            const request = {
+                location: location,
+                radius: radius,
+                type: ['zoo', 'aquarium', 'national_park']
+            };
+// finds results within the provided radius and creates the marker icon
+            service.nearbySearch(request, (results, status) => {
+                if (status === google.maps.places.PlacesServiceStatus.OK) {
+                    for (let i = 0; i < results.length; i++) {
+                        createMarker(results[i]);
+                    }
+                }
+            });
+        }
+
+        function createMarker(place) {
+            const marker = new google.maps.Marker({
+                map: map,
+                position: place.geometry.location
+            });
+
+            google.maps.event.addListener(marker, 'click', () => {
+                const infowindow = new google.maps.InfoWindow({
+                    content: place.name
+                });
+                infowindow.open(map, marker);
+            });
+        }
+
+        document.getElementById('searchForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const zipCode = document.getElementById('zipCode').value;
+            const distance = document.getElementById('distance').value;
+
+            try {
+                const location = await geocodeZipCode(zipCode);
+                map.setCenter(location);
+                map.setZoom(10);
+        // Search for animal attractions within the specified distance
+                searchNearby(location, distance); // * 1609.34)
+        // Add a red circle to the map
+                const circle = new google.maps.Circle({
+                    map: map,
+                    radius: distance * 1609.34, // Convert miles to meters
+                    fillColor: '#FF0000',
+                    fillOpacity: 0.15, // fill opacity seems to be good at 0.15
+                    strokeColor: '#FF0000',
+                    strokeOpacity: 0.8,
+                    strokeWeight: 2,
+                    center: location
+                });
+        // console.log(`Searching for animal attractions within ${distance} miles of ${zipCode}`)
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        });
+
+        // Add a red circle (search radius) to the map
+        // Need to refresh page with new search, as search radius circles remain with each new search
+                const circle = new google.maps.Circle({
+                    map: map,
+                    radius: distance * 1609.34, // Convert miles to meters
+                    fillColor: '#FF0000',
+                    fillOpacity: 0.15, // fill opacity seems to be good at 0.15
+                    strokeColor: '#FF0000',
+                    strokeOpacity: 0.8,
+                    strokeWeight: 2,
+                    center: location
+                });
+
+
+        window.onload = initMap;
+    </script>
+</body>
+</html>
