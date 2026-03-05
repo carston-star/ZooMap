@@ -187,54 +187,49 @@
         }
 
         function searchNearby(lat, lng, radiusMeters) {
-            // Using Overpass API to search for zoos, aquariums, and wildlife attractions
-            const query = `
-                [bbox:${lat - 0.2},${lng - 0.2},${lat + 0.2},${lng + 0.2}];
-                (
-                    node["tourism"="zoo"];
-                    node["leisure"="nature_reserve"];
-                    way["tourism"="zoo"];
-                    way["leisure"="nature_reserve"];
-                    node["amenity"="aquarium"];
-                    way["amenity"="aquarium"];
-                );
-                out center;
-            `;
-
-            const overpassUrl = 'https://overpass-api.de/api/interpreter';
+            // Using Nominatim to search for places with "zoo" or "aquarium" in the name
+            // This is more reliable than Overpass API
             
-            fetch(overpassUrl, {
-                method: 'POST',
-                body: query
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.elements) {
-                    data.elements.forEach(element => {
-                        let lat, lng, name;
-                        
-                        if (element.center) {
-                            lat = element.center.lat;
-                            lng = element.center.lon;
-                        } else if (element.lat) {
-                            lat = element.lat;
-                            lng = element.lon;
+            const searchTerms = ['zoo', 'aquarium', 'wildlife park', 'safari park'];
+            let searchesCompleted = 0;
+            
+            searchTerms.forEach((term, index) => {
+                // Add delay between requests to avoid rate limiting (429 errors)
+                setTimeout(() => {
+                    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(term)}&format=json&limit=50&bounded=1&viewbox=${lng - 1.5},${lat - 1.5},${lng + 1.5},${lat + 1.5}`;
+                    
+                    console.log(`Searching for "${term}" near ${lat}, ${lng}`);
+                    
+                    fetch(url, {
+                        headers: {
+                            'User-Agent': 'ZooMapFinder/1.0 (Local App)'
                         }
-                        
-                        name = element.tags.name || 'Animal Attraction';
-                        
-                        if (lat && lng) {
-                            // Check if within radius
-                            const distance = getDistance([lat, lng], [lat, lng]);
-                            if (distance <= radiusMeters) {
-                                createMarker(lat, lng, name);
+                    })
+                        .then(response => response.json())
+                        .then(results => {
+                            console.log(`Found ${results.length} results for "${term}"`);
+                            results.forEach(result => {
+                                const resultLat = parseFloat(result.lat);
+                                const resultLng = parseFloat(result.lon);
+                                
+                                // Check if within radius
+                                const distance = getDistance([resultLat, resultLng], [lat, lng]);
+                                if (distance <= radiusMeters) {
+                                    console.log(`Adding ${result.name} (distance: ${(distance/1609.34).toFixed(2)} miles)`);
+                                    createMarker(resultLat, resultLng, result.name);
+                                }
+                            });
+                            
+                            searchesCompleted++;
+                            if (searchesCompleted === searchTerms.length) {
+                                console.log(`Search complete: found ${attractionCount} total attractions`);
                             }
-                        }
-                    });
-                }
-            })
-            .catch(error => {
-                console.error('Error searching attractions:', error);
+                        })
+                        .catch(error => {
+                            console.error(`Error searching for "${term}":`, error);
+                            searchesCompleted++;
+                        });
+                }, index * 500); // 500ms delay between each search term
             });
         }
 
@@ -273,9 +268,6 @@
             try {
                 const [lat, lng] = await geocodeLocation(address);
                 
-                // Center map on the location
-                map.setView([lat, lng], 10);
-                
                 // Add search radius circle
                 searchCircle = L.circle([lat, lng], {
                     radius: distance * 1609.34, // Convert miles to meters
@@ -286,8 +278,8 @@
                     opacity: 0.8
                 }).addTo(map);
                 
-                // Automatically resize map to fit the search circle
-                map.fitBounds(searchCircle.getBounds(), { padding: [50, 50] });
+                // Fit map to search circle bounds - disable animation for smooth transition
+                map.fitBounds(searchCircle.getBounds(), { padding: [50, 50], animate: true, duration: 0.5 });
                 
                 // Search for animal attractions
                 searchNearby(lat, lng, distance * 1609.34);
